@@ -1,0 +1,527 @@
+=========================================
+ Photo Gallery
+=========================================
+ Create Controllers_ Models & Database
+=========================================
+1.cli
+----
+    $ composer create-project laravel/laravel gallery
+
+    $ cd gallery
+
+    $ subl ./
+
+2.mysql
+------------
+    create database gallery;
+
+3.edit file .env
+---------------
+    DB_DATABASE=gallery
+    DB_USERNAME=root
+    DB_PASSWORD=1
+
+4.cli
+---- 
+	$ php artisan serve
+
+    $ php artisan make:controller AlbumsController
+    
+    $ php artisan make:controller PhotosController
+    
+    $ php artisan make:model Album -m
+    
+    $ php artisan make:model Photo -m
+
+5.edit files
+------------- 
+    /database/migrations/2018_03_02_053546_create_albums_table.php:
+
+    public function up()
+    {
+        Schema::create('albums', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->string('cover_image');
+            $table->timestamps();
+        });
+    }
+
+    /database/migrations/2018_03_02_053556_create_photos_table.php
+    public function up()
+    {
+        Schema::create('photos', function (Blueprint $table) {
+            $table->increments('id');
+            $table->integer('album_id');
+            $table->string('photo');
+            $table->string('title');
+            $table->string('size');
+            $table->string('description')->nullable();
+            $table->timestamps();
+        });
+    }
+
+6.cli 
+-----
+    $ php artisan migrate
+
+ Form Components & Views
+========================
+
+edit files /app/Album.php and /app/Photo.php 
+--------------------------------------------------
+  class Album extends Model
+  {
+      public function photos()
+      {
+        return $this->hasMany('App\Photo');
+      }
+  }
+
+  class Photo extends Model
+  {
+      public function album()
+      {
+        $this->belongsTo('App\Album');
+      }
+  }
+
+1. edit /app/Http/Controllers/AlbumsController.php    
+--------------------------------------------------
+    public function index(){
+      $albums =  \App\Album::with('Photos')->get();
+      return view('albums.index')->with('albums', $albums);
+    }
+
+    public function create(){
+      return view('albums.create');
+    }
+
+2. edit file /routes/web.php
+-----------------------------
+    Route::get('/', 'AlbumsController@index');
+    Route::get('/albums', 'AlbumsController@index');
+    Route::get('/albums/create', 'AlbumsController@create');
+    Route::post('/albums/store', 'AlbumsController@store');    
+
+
+3. create files
+----------------
+    /resources/views/layouts/app.blade.php:
+
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>PhotoShow</title>
+    	<link href="{{ asset('css/app.css') }}" rel="stylesheet">
+      </head>
+      <body>
+        <div class="container">
+          @yield('content')
+        </div>
+      </body>
+    </html>
+
+    /resources/views/albums/index.blade.php:
+
+    @extends('layouts.app')
+
+    @section('content')
+      <h3>Albums</h3>
+    @endsection
+
+    /resources/views/albums/create.blade.php
+    @extends('layouts.app')
+
+    @section('content')
+      <h3>Create Album</h3>
+    @endsection
+    
+
+ Cover Image Upload
+====================================================
+1. create a file /resources/views/inc/top.blade.php
+-------------------------------------------------
+<nav class="navbar navbar-default">
+      <div class="container">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="/">Albums</a>
+        </div>
+          <ul class="nav navbar-nav">
+            <li class="active"><a href="#">Home</a></li>
+            <li><a href="/albums/create">Create Album</a></li>
+          </ul>
+      </div>
+    </nav>
+
+
+2. create a file /resources/views/inc/messages.blade.php
+------------------------------------------------------
+    @if(count($errors) > 0)
+      @foreach($errors->all() as $error)
+        <div class="alert alert-danger">
+          {{$error}}
+        </div>
+      @endforeach
+    @endif
+
+    @if(session('success'))
+      <div class="alert alert-success">
+        {{session('success')}}
+      </div>
+    @endif
+
+    @if(session('error'))
+      <div class="alert alert-danger">
+        {{session('error')}}
+      </div>
+    @endif
+
+
+3. edit /resources/views/layouts/app.blade.php
+-------------------------------------------
+    <body>
+        @include('inc.top')
+        <div class="container">
+         @include('inc.messages')
+        ...
+
+
+4. cli
+---------------------------------
+php artisan storage:link
+
+
+edit /resources/views/albums/create.blade.php
+-----------------------------------------
+@section('content')
+  <h3>Create Album</h3>
+  <form action="/albums/store" method="POST" enctype="multipart/form-data">
+    {{csrf_field()}}
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" name="name" class="form-control" placeholder="Album Name"> 
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <textarea type="text" name="description" class="form-control" placeholder="Album Description"></textarea> 
+    </div>
+ 
+    <div class="form-group">
+      <label>Album Cover</label>
+      <input type="file" name="cover_image" class="form-control"> 
+    </div>
+    <button type="submit" class="btn btn-primary">Submit</button>
+  </form>
+ @endsection
+
+5. edit /app/Http/Controllers/AlbumsController.php
+--------------------------------------------------
+
+    <?php
+
+    namespace App\Http\Controllers;
+
+    use Illuminate\Http\Request;
+    use App\Album;
+
+    ...
+
+    public function store(Request $request){
+      $this->validate($request, [
+        'name' => 'required',
+        'cover_image' => 'image|max:999'
+      ]);
+
+      // Get filename with extension
+      $filenameWithExt = $request->file('cover_image')->getClientOriginalName();
+
+
+      // Get just the filename
+      $filename = pathinfo($filenameWithExt, PATHINFO_FILENAME);
+
+      // Get extension
+      $extension = $request->file('cover_image')->getClientOriginalExtension();
+
+      // Create new filename
+      $filenameToStore = $filename.'_'.time().'.'.$extension;
+
+      // Uplaod image
+      $path= $request->file('cover_image')->storeAs('public/album_covers', $filenameToStore);
+      // Create album
+      $album = new Album;
+      $album->name = $request->input('name');
+      $album->description = $request->input('description');
+      $album->cover_image = $filenameToStore;
+
+      $album->save();
+
+      return redirect('/albums')->with('success', 'Album Created');
+    }
+
+ Create & Display Albums
+===============================================
+
+1. edit /app/Album.php and /app/Photo.php
+------------------------------------------
+class Album extends Model
+{
+
+    public function photos()
+    {
+        return $this->hasMany('App\Photo');
+    }
+
+
+
+class Photo extends Model
+{
+
+    public function almum()
+    {
+        $this->belongsTo('App\Album');
+    }
+
+
+2. edit /app/Http/Controllers/AlbumsController.php
+--------------------------------------------------
+
+    public function index(){
+        $albums = Album::with('Photos')->get();
+        return view('albums.index')->with('albums', $albums);
+    }
+
+3. edit /resources/views/albums/index.blade.php
+------------------------------------------------
+
+@section('content')
+  <h3>Albums</h3>
+  @foreach($albums as $album)
+    {{$almum->name}}
+  @endforeach
+
+@extends('layouts.app')
+
+@section('content')
+  <h1>Albums</h1>
+  @if(count($albums) > 0)
+    <div id="albums">
+      <div class="row text-center">
+        @foreach($albums as $album)
+         
+             <div class='col-md-4'>
+               <a href="/albums/{{$album->id}}">
+                  <img class="img-thumnail" src="storage/album_covers/{{$album->cover_image}}" alt="{{$album->name}}">
+                </a>
+               <br>
+               <h4>{{$album->name}}</h4>
+          </div>
+          @if($loop->iteration % 3 == 0)
+              </div><div class="row text-center">
+            @endif
+        @endforeach
+      </div>
+    </div>
+  @else
+    <p>No Albums To Display</p>
+  @endif
+<hr>
+@endsection
+
+
+ Photo Uploads
+====================================================
+1. edit /app/Http/Controllers/AlbumsController.php
+--------------------------------------------------
+
+  public function show($id){
+      $album = Album::with('Photos')->find($id);
+      return view('albums.show')->with('album', $album);
+    }
+
+2. create  a file /resources/views/albums/show.blade.php
+--------------------------------------------------------
+  @extends('layouts.app')
+
+  @section('content')
+    <h1>{{$album->name}}</h1>
+    <a class="btn btn-primary" href="/">Go Back</a>
+    <a class="btn btn-success" href="/photos/create/{{$album->id}}">Upload Photo To Album</a>
+    <hr>
+  @endsection
+
+3. edit /routes/web.php
+-----------------------------------
+  Route::get('/albums/create', 'AlbumsController@create');
+  Route::get('/albums/{id}', 'AlbumsController@show');
+
+
+
+4. add to /routes/web.php
+-----------------------------------
+  Route::get('/photos/create/{id}', 'PhotosController@create');
+  Route::post('/photos/store', 'PhotosController@store');
+
+
+5. edit /app/Http/Controllers/PhotosController.php
+----------------------------------------------------
+use App\Photo;
+
+class PhotosController extends Controller
+{
+    public function create($album_id){
+      return view('photos.create')->with('album_id', $album_id);
+    }
+
+    public function store(Request $request){
+      $this->validate($request, [
+        'title' => 'required',
+        'photo' => 'image|max:1999'
+      ]);
+
+      // Get filename with extension
+      $filenameWithExt = $request->file('photo')->getClientOriginalName();
+
+      // Get just the filename
+      $filename = pathinfo($filenameWithExt, PATHINFO_FILENAME);
+
+      // Get extension
+      $extension = $request->file('photo')->getClientOriginalExtension();
+
+      // Create new filename
+      $filenameToStore = $filename.'_'.time().'.'.$extension;
+
+      // Uplaod image
+      $path= $request->file('photo')->storeAs('public/photos/'.$request->input('album_id'), $filenameToStore);
+
+      // Upload Photo
+      $photo = new Photo;
+      $photo->album_id = $request->input('album_id');
+      $photo->title = $request->input('title');
+      $photo->description = $request->input('description');
+      $photo->size = $request->file('photo')->getClientSize();
+      $photo->photo = $filenameToStore;
+
+      $photo->save();
+
+      return redirect('/albums/'.$request->input('album_id'))->with('success', 'Photo Uploaded');
+    }
+}
+
+
+create a new file /resources/views/photos/create.blade.php
+-------------------------------------------------------------
+@extends('layouts.app')
+
+@section('content')
+  <h3>Create Photo</h3>
+  <form action="/photos/store" method="POST" enctype="multipart/form-data">
+    {{csrf_field()}}
+    <div class="form-group">
+      <label>Title</label>
+      <input type="text" name="title" class="form-control" placeholder="Photo title Name"> 
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <textarea type="text" name="description" class="form-control" placeholder="Photo Description"></textarea> 
+    </div>
+ 
+    <div class="form-group">
+      <label>Photo</label>
+      <input type="file" name="photo" class="form-control"> 
+    </div>
+  <input type="hidden" name="album_id" value="{{$album_id}}">
+    <button type="submit" class="btn btn-primary">Submit</button>
+  </form>
+ @endsection
+
+ Album Photo Listings
+=========================================================
+
+1. edit /resources/views/albums/show.blade.php
+------------------------------------------------
+  @extends('layouts.app')
+
+  @section('content')
+    <h1>{{$album->name}}</h1>
+    <a class="btn btn-primary" href="/">Go Back</a>
+    <a class="btn btn-success" href="/photos/create/{{$album->id}}">Upload Photo To Album</a>
+    <hr>
+    @if(count($album->photos) > 0)
+      <div id="albums">
+        <div class="row text-center">
+          @foreach($album->photos as $photo)
+           
+               <div class='col-md-4'>
+                 <a href="/photos/{{$photo->id}}">
+                    <img class="img-thumbnail" src="/storage/photos/{{$photo->album_id}}/{{$photo->photo}}" alt="{{$photo->title}}">
+                  </a>
+                 <br>
+                 <h4>{{$photo->title}}</h4>
+            </div>
+            @if($loop->iteration % 3 == 0)
+                </div><div class="row text-center">
+              @endif
+          @endforeach
+        </div>
+      </div>
+    @else
+      <p>No Photos To Display</p>
+    @endif
+  <hr>
+  @endsection
+
+
+ Photo Page & Delete
+=========================================================
+
+1. append to the file /routes/web.php 
+-----------------------------------------
+Route::get('/photos/{id}', 'PhotosController@show');
+Route::delete('/photos/{id}', 'PhotosController@destroy');
+
+2. edit /app/Http/Controllers/PhotosController.php
+---------------------------------------------------
+    public function show($id){
+      $photo = Photo::find($id);
+      return view('photos.show')->with('photo', $photo);
+    }
+
+    public function destroy($id){
+      $photo = Photo::find($id);
+
+      if(Storage::delete('public/photos/'.$photo->album_id.'/'.$photo->photo)){
+        $photo->delete();
+
+        return redirect('/')->with('success', 'Photo Deleted');
+      }
+    }
+
+
+3. create the file /resources/views/photos/show.blade.php
+---------------------------------------------------------
+
+@extends('layouts.app')
+
+@section('content')
+  <h3>{{$photo->title}}</h3>
+  <p>{{$photo->description}}</p>
+  <a href="/albums/{{$photo->album_id}}" class="btn btn-primary">
+    Back To Gallery
+  </a>
+  <hr>
+  <img src="/storage/photos/{{$photo->album_id}}/{{$photo->photo}}"  class="img-fluid" alt="{{$photo->title}}">
+  <hr>
+  <small>Size: {{$photo->size}}</small>
+  <br><br>
+  <form action="/photos/{{$photo->id}}" method="POST">
+    <input type="hidden" name="_method" value="DELETE">
+    {{@csrf_field()}}
+    <button type="submit" class="btn btn-danger">Delete Photo</button>
+  </form>
+@endsection
+
