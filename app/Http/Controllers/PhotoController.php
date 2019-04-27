@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Photo;
 
-class PhotosController extends Controller
+class PhotoController extends Controller
 {
     public function create($album_id){
       return view('photos.create')->with('album_id', $album_id);
